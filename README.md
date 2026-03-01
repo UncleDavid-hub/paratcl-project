@@ -1,7 +1,7 @@
-# Welcome to ParaTcl! 🚀 *** ALMOST *** ready to launch - hardware support simulated for now !
+# Welcome to ParaTcl! 🚀 *** ALMOST *** ready to launch , hardware support simulated for now !
 
 ParaTcl is a unified parallel Tcl engine running on multiple hosts. <img width="2304" height="1728" alt="paratcl" src="https://github.com/user-attachments/assets/e3359e86-d873-439a-9593-2ab5ca9de027" />
-  This 64-bit version is optimized for high-performance systems with **MPI** and **CUDA** support.
+  This 64-bit version is optimized for high-performance systems with **MPI** and **CUDA** support. Isn't it about time that you got your hands onto some real computing power - WITHOUT - spending any more money ? ! Tap into those basically idle CUDA cores, harness the full power of MPI, tighten bolts securing your seat to the floor, countdown commencing ...
 
 ## 🚀 Quick Start for Beginners
 
