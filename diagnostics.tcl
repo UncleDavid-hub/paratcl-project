@@ -18,24 +18,24 @@ lassign $results mpi cuda vulkan ssh critcl
 
 puts "\nDiagnostic Summary:"
 if {$mpi && $ssh} {
-    puts "  [X] Cluster Ready: MPI and SSH are configured for multi-node runs."
+    puts "  {X} Cluster Ready: MPI and SSH are configured for multi-node runs."
 } else {
-    puts "  [ ] Cluster Limited: Local execution only."
+    puts "  { } Cluster Limited: Local execution only."
 }
 
 if {$cuda} {
-    puts "  [X] NVIDIA Acceleration: CUDA is available for Tier 1 offloading."
+    puts "  {X} NVIDIA Acceleration: CUDA is available for Tier 1 offloading."
 }
 if {$vulkan} {
-    puts "  [X] ARM/Pi Acceleration: Vulkan is available for Tier 2 offloading."
+    puts "  {X} ARM/Pi Acceleration: Vulkan is available for Tier 2 offloading."
 }
 
 if {!$cuda && !$vulkan} {
-    puts "  [!] No GPU Acceleration: Defaulting to CPU (Tier 3 / Fallback)."
+    puts "  {!} No GPU Acceleration: Defaulting to CPU (Tier 3 / Fallback)."
 }
 
 if {$critcl} {
-    puts "  [X] C-Kernel Ready: 'critcl' is installed for high-performance execution."
+    puts "  {X} C-Kernel Ready: 'critcl' is installed for high-performance execution."
 }
 
 puts "\nReady for ParaTcl! Use 'tclsh demo.tcl master' to start."
