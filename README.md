@@ -27,6 +27,12 @@ Open two terminal windows.
 **Terminal 1 (Master):** `tclsh demo.tcl master`
 **Terminal 2 (Worker):** `tclsh demo.tcl`
 
+### Step 3: Verify your Hardware
+Run the new diagnostic tool to see your system's capabilities:
+```bash
+tclsh diagnostics.tcl
+```
+
 ParaTcl will automatically detect your architecture and tell you exactly which packages to install (like `openmpi-bin`, `nvidia-cuda-toolkit`, or `mesa-vulkan-drivers`) to reach peak performance!
 
 ## 🛠️ Exploring the Architecture
