@@ -1,5 +1,5 @@
 # NAME
-paracomms - ParaTcl inter-node communication module
+paracomms - Secured communication layer for ParaTcl
 
 # SYNOPSIS
 ```tcl
@@ -9,23 +9,26 @@ paracomms::broadcast_command peers cmd
 ```
 
 # DESCRIPTION
-The `paracomms` module handles all Tcl-based communication between nodes using the `comm` package. It includes a security model based on safe interpreters to restrict what commands can be executed remotely.
+The `paracomms` module handles all inter-node communication using the Tcl `comm` package.
+
+# SECURITY: SLAVE INTERPRETERS
+To prevent unauthorized code execution, `paracomms` creates a restricted **Slave Interpreter** (named `slave`).
+- All incoming commands from remote nodes are executed within this slave.
+- Only a strict whitelist of commands are aliased into the slave:
+    - `::paravar::remote_update`
+    - `::paragui::log`
+    - `::paravar::update_peers`
+- Any attempt to execute other commands (like `exec`, `file`, etc.) will fail.
 
 # COMMANDS
 **paracomms::init**
-Initializes the communication channel and creates the restricted slave interpreter. Returns the local `comm` ID.
+Initializes the communication layer, creates the secured slave interpreter, and returns the local `comm` ID.
 
-**paracomms::send_command** *peer* *cmd*
-Sends a Tcl command to the specified *peer* ID. Returns the result of the remote execution.
+**paracomms::send_command** *peer cmd*
+Sends a command to a specific peer. The command will be executed in the peer's slave interpreter.
 
-**paracomms::broadcast_command** *peers* *cmd*
-Sends the same command to a list of *peers*.
-
-# SECURITY
-Incoming commands are executed in a safe interpreter. Only the following commands are allowed:
-- `::paravar::remote_update`
-- `::paragui::log`
-- `::paravar::update_peers`
+**paracomms::broadcast_command** *peers cmd*
+Sends the same command to a list of peers.
 
 # SEE ALSO
-paratcl(n), comm(n)
+paratcl(n), paravar(n)
