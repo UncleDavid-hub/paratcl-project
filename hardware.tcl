@@ -8,6 +8,7 @@ namespace eval hardware {
     variable hostfile "hosts.para"
     variable runtime_hostfile "hosts.para.runtime"
 
+    variable target_tier "Unknown"
     variable missing_components {}
 
     proc detect {} {
@@ -18,10 +19,25 @@ namespace eval hardware {
         variable critcl_present
         variable missing_components
         variable bootknife_mode
+        variable target_tier
 
         set missing_components {}
 
-        # Detect MPI
+        # 1. Detect Architecture
+        set arch $::tcl_platform(machine)
+        set word_size [expr {$::tcl_platform(pointerSize) * 8}]
+
+        if {$word_size == 64 && ($arch eq "x86_64" || $arch eq "amd64")} {
+            set target_tier "Modern x86_64 (MPI + CUDA Ready)"
+        } elseif {$arch eq "aarch64" || [string match "arm*" $arch]} {
+            set target_tier "Raspberry Pi / ARM (MPI + Vulkan Ready)"
+        } elseif {$word_size == 32 && ($arch eq "i386" || $arch eq "i686")} {
+            set target_tier "Legacy x86_32 (MPI Only)"
+        } else {
+            set target_tier "Generic $arch ($word_size-bit)"
+        }
+
+        # 2. Detect MPI
         if {[auto_execok mpirun] ne "" || [auto_execok mpiexec] ne ""} {
             set mpi_present 1
         } else {
@@ -29,21 +45,22 @@ namespace eval hardware {
             lappend missing_components "MPI (mpirun or mpiexec)"
         }
         
-        # Detect CUDA
+        # 3. Detect GPU Accelerators
         if {[auto_execok nvcc] ne "" || [file exists "/usr/local/cuda/bin/nvcc"]} {
             set cuda_present 1
         }
 
-        # Detect Vulkan
         if {[auto_execok vulkaninfo] ne "" || [file exists "/usr/lib/arm-linux-gnueabihf/libvulkan.so.1"] || [file exists "/usr/lib/aarch64-linux-gnu/libvulkan.so.1"]} {
             set vulkan_present 1
         }
 
-        if {!$cuda_present && !$vulkan_present} {
-            lappend missing_components "GPU Accelerator (CUDA or Vulkan)"
+        if {$target_tier eq "Modern x86_64 (MPI + CUDA Ready)" && !$cuda_present} {
+            lappend missing_components "NVIDIA CUDA Toolkit"
+        } elseif {$target_tier eq "Raspberry Pi / ARM (MPI + Vulkan Ready)" && !$vulkan_present} {
+            lappend missing_components "Mesa Vulkan Drivers"
         }
 
-        # Detect SSH (needed for MPI)
+        # 4. Detect SSH
         if {[auto_execok ssh] ne ""} {
             set ssh_present 1
         } else {
@@ -51,7 +68,7 @@ namespace eval hardware {
             lappend missing_components "SSH (ssh)"
         }
 
-        # Detect critcl
+        # 5. Detect critcl
         if {![catch {package require critcl}]} {
             set critcl_present 1
         } else {
@@ -59,12 +76,7 @@ namespace eval hardware {
             lappend missing_components "Tcl package 'critcl'"
         }
 
-        if {[llength $missing_components] > 0} {
-            set bootknife_mode 1
-        } else {
-            set bootknife_mode 0
-        }
-        
+        set bootknife_mode [expr {[llength $missing_components] > 0}]
         return [list $mpi_present $cuda_present $vulkan_present $ssh_present $critcl_present]
     }
 
@@ -76,28 +88,37 @@ namespace eval hardware {
         variable critcl_present
         variable missing_components
         variable bootknife_mode
+        variable target_tier
 
-        puts "--- ParaTcl Unified Hardware Status ---"
-        puts "MPI:    [expr {$mpi_present ? "FOUND" : "NOT FOUND"}]"
-        puts "CUDA:   [expr {$cuda_present ? "FOUND" : "NOT FOUND"}]"
-        puts "Vulkan: [expr {$vulkan_present ? "FOUND" : "NOT FOUND"}]"
-        puts "SSH:    [expr {$ssh_present ? "FOUND" : "NOT FOUND"}]"
-        puts "Critcl: [expr {$critcl_present ? "FOUND" : "NOT FOUND"}]"
+        puts "--- ParaTcl Grand Unified HPC Status ---"
+        puts "Architecture: $target_tier"
+        puts "MPI:          [expr {$mpi_present ? "FOUND" : "NOT FOUND"}]"
+        puts "CUDA:         [expr {$cuda_present ? "FOUND" : "NOT FOUND"}]"
+        puts "Vulkan:       [expr {$vulkan_present ? "FOUND" : "NOT FOUND"}]"
+        puts "SSH:          [expr {$ssh_present ? "FOUND" : "NOT FOUND"}]"
+        puts "Critcl:       [expr {$critcl_present ? "FOUND" : "NOT FOUND"}]"
 
         if {$bootknife_mode} {
-            puts "\n*** BOOTKNIFE MODE ENABLED ***"
+            puts "\n*** BOOTKNIFE MODE ENABLED (Partial configuration detected) ***"
             puts "Missing: [join $missing_components ", "]"
-            puts "ParaTcl will run in a minimal local-only mode."
 
             if {!$mpi_present || !$ssh_present} {
-                puts "\nTIP: For MPI, install openmpi-bin and ensure passwordless SSH is configured."
+                puts "\nTIP: For Cluster MPI, install openmpi-bin and ensure passwordless SSH is configured."
             }
-            if {!$cuda_present && !$vulkan_present} {
-                puts "TIP: For GPU acceleration, install NVIDIA CUDA Toolkit or Mesa Vulkan drivers."
+
+            if {$target_tier eq "Modern x86_64 (MPI + CUDA Ready)" && !$cuda_present} {
+                puts "TIP: Install NVIDIA CUDA Toolkit to unlock thousands of compute cores."
+            } elseif {$target_tier eq "Raspberry Pi / ARM (MPI + Vulkan Ready)" && !$vulkan_present} {
+                puts "TIP: Install mesa-vulkan-drivers to enable GPU compute shaders."
+            } elseif {$target_tier eq "Legacy x86_32 (MPI Only)"} {
+                puts "TIP: Focus on MPI for horizontal scaling; GPU acceleration is typically not supported on this tier."
             }
+
             if {!$critcl_present} {
-                puts "TIP: Install the 'critcl' Tcl package to enable on-the-fly compilation."
+                puts "TIP: Install 'critcl' (apt-get install libcritcl-tcl) for on-the-fly C kernel compilation."
             }
+        } else {
+            puts "\n+++ OPTIMIZED STATE DETECTED: Hardware fully harnessed for this tier! +++"
         }
         puts "----------------------------------------"
     }
@@ -107,10 +128,7 @@ namespace eval hardware {
         variable runtime_hostfile
         variable ssh_present
 
-        if {![file exists $hostfile]} {
-            return {}
-        }
-
+        if {![file exists $hostfile]} { return {} }
         set fp [open $hostfile r]
         set raw_hosts [split [read $fp] "\n"]
         close $fp
@@ -120,7 +138,6 @@ namespace eval hardware {
             set host [string trim $line]
             if {$host eq "" || [string match "#*" $host]} continue
             if {!$ssh_present} continue
-
             if {![catch {exec ssh -o ConnectTimeout=2 -o BatchMode=yes $host hostname} result]} {
                 lappend valid_hosts $host
             }
@@ -138,12 +155,10 @@ namespace eval hardware {
     proc mpi_run {cmd} {
         variable mpi_present
         variable runtime_hostfile
-
         if {$mpi_present && [file exists $runtime_hostfile]} {
             set script_path [file normalize $::argv0]
             set mpi_exec [auto_execok mpirun]
             if {$mpi_exec eq ""} { set mpi_exec [auto_execok mpiexec] }
-
             if {$mpi_exec ne ""} {
                 set extra_args ""
                 if {[info exists ::env(USER)] && $::env(USER) eq "root"} { lappend extra_args "--allow-run-as-root" }
@@ -235,7 +250,7 @@ namespace eval hardware {
     }
 
     proc cpu_fallback {kernel_name inputs} {
-        puts "CPU Fallback: Executing $kernel_name..."
+        puts "CPU Fallback: Executing $kernel_name on [info hostname]..."
         return "CPU_RESULT"
     }
 }
