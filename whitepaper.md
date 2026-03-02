@@ -1,43 +1,60 @@
-# Whitepaper: ParaTcl Architecture and Design
+# Whitepaper: ParaTcl - A Unified Parallel Tcl Engine
 
 ## Abstract
 
-ParaTcl is a distributed, parallel computing framework built on the Tcl (Tool Command Language) ecosystem. It provides a seamless way to synchronize variables across multiple network nodes, detect hardware capabilities (MPI, CUDA), and manage cluster discovery using UDP broadcasting. Designed for high-performance and flexibility, ParaTcl leverages Tcl's powerful introspection and event-driven architecture to simplify the complexities of parallel and distributed system development.
+ParaTcl is a distributed, high-performance computing (HPC) framework built atop the Tool Command Language (Tcl) ecosystem. It provides a seamless abstraction for variable synchronization, automated cluster discovery, and hardware-accelerated task offloading. By integrating MPI (Message Passing Interface) for horizontal scaling and CUDA (Compute Unified Device Architecture) for vertical acceleration, ParaTcl empowers developers to harness significant computing power with minimal boilerplate. This paper details the architecture, the "Bootknife" deployment philosophy, and the underlying mechanisms that make ParaTcl a robust solution for modern parallel computing.
 
 ## 1. Introduction
 
-Traditional parallel computing often requires complex boilerplate for inter-node communication and resource management. ParaTcl addresses these challenges by providing a modular architecture that abstracts the network, discovery, and hardware layers, allowing developers to focus on application logic.
+Parallel computing often suffers from the "configuration tax"—the significant effort required to set up network communication, synchronization primitives, and hardware drivers. ParaTcl addresses this by providing a "zero-config" experience where possible, and a "guided-config" experience elsewhere. It is designed to run anywhere, from a single laptop to a multi-node supercomputer cluster.
 
-## 2. Core Architecture
+## 2. System Architecture
 
-ParaTcl is organized into several key modules:
+ParaTcl is composed of several interdependent modules:
 
-- **ParaTcl Main (`paratcl.tcl`):** The entry point that orchestrates the initialization and lifecycle of the system.
-- **ParaComms (`comms.tcl`):** Handles inter-node communication using the `comm` package. It utilizes safe interpreters for secure remote command execution.
-- **Discovery (`discovery.tcl`):** Implements automatic node discovery using UDP broadcasting.
-- **ParaVar (`paravar.tcl`):** Implements "Parallel Variables" that are automatically synchronized across the cluster when modified.
-- **Hardware (`hardware.tcl`):** Detects and manages local hardware resources like MPI and CUDA.
-- **ParaGUI (`gui.tcl`):** A Tk-based graphical interface for monitoring and controlling the master node.
-- **Worker (`worker.tcl`):** Defines the behavior of non-master nodes.
+### 2.1. Core Orchestration (paratcl.tcl)
+The main entry point manages the lifecycle of the application. It handles the initial master/worker role assignment and coordinates the transition from a single-node startup to a cluster-wide MPI deployment.
 
-## 3. Communication and Security
+### 2.2. Automated Discovery (discovery.tcl)
+Using UDP broadcasting on a configurable port (default 9999), ParaTcl nodes announce their presence. This allows the cluster to be dynamic; nodes can join or leave, and the "Parallel Variable" system will automatically update its synchronization list.
 
-ParaTcl uses the `comm` package for asynchronous and synchronous communication between nodes. To ensure security, all incoming commands are executed within a **restricted slave interpreter**. Only a strictly defined set of commands (e.g., `remote_update`, `log`) are aliased from the main interpreter to the slave, preventing remote nodes from executing arbitrary or malicious code.
+### 2.3. Secured Communications (comms.tcl)
+Built on the Tcl `comm` package, inter-node communication is secured via **Slave Interpreters**. Incoming commands are executed in a restricted environment where only a whitelist of "safe" commands (like variable updates) are available. This prevents remote code execution vulnerabilities while maintaining flexibility.
 
-## 4. Parallel Variables (ParaVar)
+### 2.4. Parallel Variables (paravar.tcl)
+ParaVar allows developers to treat distributed memory as if it were local. By using Tcl `trace` mechanisms, any write to a registered variable is automatically and efficiently propagated across all discovered peers.
 
-The ParaVar module introduces the concept of distributed state through parallel variables. By using Tcl's `trace` mechanism, ParaTcl detects writes to registered variables and automatically broadcasts the update to all discovered peers. This allows for a shared-memory-like experience across a distributed cluster.
+## 3. High-Performance Backend
 
-## 5. Automated Discovery
+The backend of ParaTcl has evolved from a simulator to a functional HPC interface.
 
-ParaTcl eliminates the need for manual node configuration through its Discovery module. Each node broadcasts a "HELLO" message via UDP to the local subnet. Other nodes listen for these broadcasts and maintain a dynamic list of active peers, which is then used by ParaComms and ParaVar for synchronization.
+### 3.1. MPI Cluster Lifecycle
+ParaTcl manages the entire MPI lifecycle:
+1.  **Discovery**: It reads a `hosts.para` file containing potential cluster nodes.
+2.  **Verification**: It performs asynchronous connectivity checks via passwordless SSH.
+3.  **Optimization**: It generates a `hosts.para.runtime` file containing only verified, reachable nodes.
+4.  **Deployment**: It spawns the current Tcl script across the verified hosts using `mpirun` or `mpiexec`.
+5.  **Handover**: The initial launcher process hands over control to the MPI-managed cluster to avoid redundant master processes.
 
-## 6. Hardware Acceleration and Parallelism
+### 3.2. CUDA Offloading via Critcl
+ParaTcl provides a framework for GPU acceleration using `critcl`. When a CUDA kernel is offloaded, ParaTcl:
+1.  Detects the presence of `nvcc` and the CUDA runtime.
+2.  Wraps the provided CUDA C code in a `critcl` wrapper.
+3.  Compiles the kernel on-the-fly into a shared object.
+4.  Exposes the kernel as a native Tcl command for high-performance execution.
 
-ParaTcl is designed with modern HPC in mind:
-- **MPI Integration:** Automatically detects MPI environments and provides a wrapper for executing tasks via `mpirun`.
-- **CUDA Offloading:** Detects CUDA availability and provides a framework for kernel offloading using `critcl`, enabling GPU-accelerated computations.
+## 4. The "Bootknife" Philosophy
 
-## 7. Conclusion
+The "Bootknife" mode is a core design principle of ParaTcl. It ensures that the system is always "ready for action," even in suboptimal environments.
 
-ParaTcl provides a robust, secure, and easy-to-use framework for Tcl-based parallel computing. By combining automated discovery, secure communication, and distributed state synchronization, it enables rapid development of scalable and high-performance applications.
+- **Minimal Requirements**: If MPI or CUDA are missing, ParaTcl doesn't fail; it reverts to a local-only, CPU-based execution mode.
+- **Actionable Diagnostics**: When hardware is missing, ParaTcl provides the user with specific tips (e.g., `ssh-copy-id` instructions, package names) to upgrade their environment to full performance.
+- **Scaling**: A "Bootknife" node can act as a fully functional developer workstation, which can then be deployed without code changes to a production cluster.
+
+## 5. Security and Connectivity
+
+Connectivity is predicated on **Passwordless SSH**. ParaTcl expects a trust relationship between nodes. If a node is unreachable or requires interactive authentication, it is automatically pruned from the runtime list to prevent cluster-wide hangs.
+
+## 6. Conclusion
+
+ParaTcl bridges the gap between the ease of use of a scripting language and the raw power of HPC hardware. By automating the complexities of discovery, connectivity, and offloading, it allows researchers and engineers to focus on the algorithm rather than the infrastructure.
