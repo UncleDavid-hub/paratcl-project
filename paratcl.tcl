@@ -10,6 +10,7 @@ source worker.tcl
 namespace eval paratcl {
     variable is_master 0
     variable discovery_port 9999
+    variable main_script ""
 
     proc init {master_flag {dport 9999}} {
         variable is_master
@@ -23,6 +24,25 @@ namespace eval paratcl {
         # Detect hardware
         ::hardware::detect
         ::hardware::status
+
+        # If we have MPI, we can use it to spawn ourselves across the cluster
+        if {$is_master && ![info exists ::env(PARA_SPAWNED)]} {
+            set ::env(PARA_SPAWNED) 1
+
+            # Identify the main script to run across the cluster
+            variable main_script
+            if {[info exists ::argv0]} {
+                set main_script [file normalize $::argv0]
+            } else {
+                set main_script [file normalize [info script]]
+            }
+
+            # mpi_run will automatically check for hosts.para and connectivity
+            if {[::hardware::mpi_run [list]]} {
+                puts "Cluster launched. Master process exiting to avoid duplication."
+                exit 0
+            }
+        }
         
         # Initialize discovery
         ::discovery::init $comm_id $discovery_port
