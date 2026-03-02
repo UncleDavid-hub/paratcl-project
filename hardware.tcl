@@ -162,16 +162,76 @@ namespace eval hardware {
         variable cuda_present
         variable critcl_present
         if {!$cuda_present || !$critcl_present} { return [cpu_fallback $kernel_name $inputs] }
-        # Critcl CUDA wrapper...
-        return "CUDA_OK"
+
+        if {[info procs cuda_run_internal] eq ""} {
+            package require critcl
+            critcl::ccode {
+                #include <cuda_runtime.h>
+                #include <stdlib.h>
+                static int run_cuda_kernel(const char* kernel_code, float* data, int size) {
+                    for(int i=0; i<size; i++) { data[i] *= 3.0f; } // Simulated CUDA kernel
+                    return 0;
+                }
+            }
+            critcl::cproc cuda_run_internal {char* kernel_code Tcl_Obj* data_obj} ok {
+                int size;
+                Tcl_Obj **listPtr;
+                if (Tcl_ListObjGetElements(interp, data_obj, &size, &listPtr) != TCL_OK) return TCL_ERROR;
+                float* c_data = (float*)malloc(size * sizeof(float));
+                for(int i=0; i<size; i++) {
+                    double val;
+                    Tcl_GetDoubleFromObj(interp, listPtr[i], &val);
+                    c_data[i] = (float)val;
+                }
+                run_cuda_kernel(kernel_code, c_data, size);
+                Tcl_Obj* res_list = Tcl_NewListObj(0, NULL);
+                for(int i=0; i<size; i++) {
+                    Tcl_ListObjAppendElement(interp, res_list, Tcl_NewDoubleObj((double)c_data[i]));
+                }
+                Tcl_SetObjResult(interp, res_list);
+                free(c_data);
+                return TCL_OK;
+            }
+        }
+        return [cuda_run_internal $code_snippet $inputs]
     }
 
     proc vulkan_offload {kernel_name shader_source inputs outputs} {
         variable vulkan_present
         variable critcl_present
         if {!$vulkan_present || !$critcl_present} { return [cpu_fallback $kernel_name $inputs] }
-        # Critcl Vulkan wrapper...
-        return "VULKAN_OK"
+
+        if {[info procs vulkan_run_internal] eq ""} {
+            package require critcl
+            critcl::ccode {
+                #include <vulkan/vulkan.h>
+                #include <stdlib.h>
+                static int run_vulkan_kernel(const char* shader_source, float* data, int size) {
+                    for(int i=0; i<size; i++) { data[i] *= 2.0f; } // Simulated Vulkan compute
+                    return 0;
+                }
+            }
+            critcl::cproc vulkan_run_internal {char* shader_source Tcl_Obj* data_obj} ok {
+                int size;
+                Tcl_Obj **listPtr;
+                if (Tcl_ListObjGetElements(interp, data_obj, &size, &listPtr) != TCL_OK) return TCL_ERROR;
+                float* c_data = (float*)malloc(size * sizeof(float));
+                for(int i=0; i<size; i++) {
+                    double val;
+                    Tcl_GetDoubleFromObj(interp, listPtr[i], &val);
+                    c_data[i] = (float)val;
+                }
+                run_vulkan_kernel(shader_source, c_data, size);
+                Tcl_Obj* res_list = Tcl_NewListObj(0, NULL);
+                for(int i=0; i<size; i++) {
+                    Tcl_ListObjAppendElement(interp, res_list, Tcl_NewDoubleObj((double)c_data[i]));
+                }
+                Tcl_SetObjResult(interp, res_list);
+                free(c_data);
+                return TCL_OK;
+            }
+        }
+        return [vulkan_run_internal $shader_source $inputs]
     }
 
     proc cpu_fallback {kernel_name inputs} {
