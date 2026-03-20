@@ -44,4 +44,7 @@ Check out `whitepaper.md` for a deep dive into the Grand Unification strategy, a
 - **Hardware Agnostic:** Optimized for x86_64, ARM, and x86_32.
 - **Cluster Health:** Integrated temperature and throttling monitor for Pi clusters.
 
-Happy Computing across all generations!
+Happy Computing across multiple platforms!
+
+<img width="1200" height="896" alt="pi-turbo" src="https://github.com/user-attachments/assets/1a46ff0d-80aa-4fa5-88fc-cf0d3889d47f" />
+"Stick with me Larry, I told you we could break out of here one day !" - Heavenly Iron Worker.
